@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+
+# Cubicost project files -- these hold real project data, keep them local
+*.TME4
+*.TME4.Int
+*.Int
+
+# Run artefacts
+.state.json
+interrupted_by.png
+delete_popup_*.png
+dismissing.png
+probe_results.json
+probe_shots/
+
+# The real schedule stays local; examples/ has a synthetic one to work from
+Test Schedule.xlsx
+
+# Superseded by README.md, which is the source of truth for how this works
+cubicost-tme-automation-spec.md
