@@ -200,6 +200,22 @@ def _send(events: list[_INPUT]) -> None:
 # Clipboard
 # --------------------------------------------------------------------------
 
+_MESSAGE_BOX_RULE = "-" * 27
+"""Windows message boxes answer Ctrl+C with their own text, ruled off like this.
+
+So a popup appearing mid-read hands us the dialog's caption and buttons instead
+of the cell's contents.  Recognising that is the difference between "a dialog
+interrupted us, deal with it and read again" and "the cell contains the wrong
+value", which would stop the run for no reason.
+"""
+
+
+def _is_message_box_text(value: str) -> bool:
+    return value.lstrip().startswith(_MESSAGE_BOX_RULE) and value.count(
+        _MESSAGE_BOX_RULE
+    ) >= 2
+
+
 MISSING = object()
 """Returned by :func:`clip_get` when the clipboard holds no text at all.
 
@@ -629,18 +645,15 @@ class TmeSession:
         detail = describe_window(intruder)
         shot = capture_window(intruder, config.INTRUDER_SHOT_FILE)
 
-        # A Qt window owned by the main Cubicost window is one of TME's own
-        # modals -- its save prompt, its duplicate-board-name question, or a
-        # validation complaint.  Anything else is a different application.
-        owned_by_tme = False
+        # A Qt window owned by TME is one of its own modals -- the save prompt,
+        # the duplicate-board-name question, or a validation complaint.  Anything
+        # else belongs to a different application.
         try:
-            owner = win32gui.GetWindow(intruder, win32con.GW_OWNER)
-            owner_title = win32gui.GetWindowText(owner) if owner else ""
-            owned_by_tme = win32gui.GetClassName(intruder).startswith("Qt5") and (
-                "Cubicost" in owner_title
-            )
+            owned_by_tme = win32gui.GetClassName(intruder).startswith(
+                "Qt5"
+            ) and self._owned_by_tme(intruder)
         except Exception:
-            pass
+            owned_by_tme = False
 
         message = (
             f"{config.WINDOW_TITLE_MATCH!r} no longer has focus -- stopping "
@@ -655,6 +668,24 @@ class TmeSession:
             )
         raise StrayWindow(message)
 
+    def _owned_by_tme(self, hwnd: int) -> bool:
+        """Is ``hwnd`` a modal belonging to TME rather than another application?
+
+        Which window owns the modal depends on which one raised it: the save
+        prompt is owned by TME's main window, while the questions the schematic
+        table asks are owned by the System Diagram dialog itself.  Both count.
+        """
+        try:
+            owner = win32gui.GetWindow(hwnd, win32con.GW_OWNER)
+        except Exception:
+            return False
+        if not owner:
+            return False
+        if owner == self.hwnd:
+            return True
+        title = win32gui.GetWindowText(owner)
+        return "Cubicost" in title or config.WINDOW_TITLE_MATCH in title
+
     def _try_dismiss_save_prompt(self, hwnd: int) -> bool:
         """Answer No to TME's save prompt, if that is genuinely what this is.
 
@@ -664,12 +695,7 @@ class TmeSession:
         """
         if win32gui.GetWindowText(hwnd) != config.SAVE_PROMPT_TITLE:
             return False
-        try:
-            owner = win32gui.GetWindow(hwnd, win32con.GW_OWNER)
-            owner_title = win32gui.GetWindowText(owner) if owner else ""
-        except Exception:
-            return False
-        if "Cubicost" not in owner_title:
+        if not self._owned_by_tme(hwnd):
             return False
 
         matched, why = looks_like(
@@ -686,15 +712,29 @@ class TmeSession:
         print("    TME asked to save the project; answering No and carrying on")
         click_in_window(hwnd, config.SAVE_PROMPT_NO_RATIO)
 
+        # Wait for the prompt itself to close.  Where focus goes afterwards is a
+        # separate question -- it often lands on TME's main window rather than
+        # back on the dialog -- so bring the dialog forward as its own step.
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
-            if not win32gui.IsWindow(hwnd) and win32gui.GetForegroundWindow() == self.hwnd:
-                self.saves_dismissed += 1
-                return True
+            if not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
+                break
             time.sleep(0.1)
+        else:
+            capture_window(hwnd, config.INTRUDER_SHOT_FILE)
+            print(f"    the save prompt did not close (see "
+                  f"{config.INTRUDER_SHOT_FILE}); stopping instead")
+            return False
 
-        print("    the save prompt did not go away; stopping instead")
-        return False
+        assert self.hwnd is not None
+        try:
+            focus_window(self.hwnd, timeout_s=5.0)
+        except FocusLost:
+            print("    could not get back to the table after the save prompt")
+            return False
+
+        self.saves_dismissed += 1
+        return True
 
     # -- key sending -------------------------------------------------------
 
@@ -793,10 +833,12 @@ class TmeSession:
         post-write row sweep and the previous-row-intact check.
         """
         last_error: TmeIoError | None = None
+        popup_reads = 0
         if expect_empty:
             timeout_s = timeout_s or config.EXPECT_EMPTY_TIMEOUT_S
             retries = 0
-        for attempt in range(retries + 1):
+        attempt = 0
+        while True:
             sentinel = self._next_sentinel()
             clip_set(sentinel)
 
@@ -810,16 +852,33 @@ class TmeSession:
                 # to close one.  A bare Esc cancels the whole dialog.
                 if not expect_empty:
                     self.throttle.penalize()
+                attempt += 1
                 last_error = CellReadTimeout(
                     f"no clipboard answer within "
                     f"{(timeout_s or self.throttle.read_timeout_s) * 1000:.0f} ms "
-                    f"(attempt {attempt + 1}/{retries + 1}); the cell may be "
-                    f"empty or the cell may not be focused -- both are failures "
-                    f"here"
+                    f"(attempt {attempt}/{retries + 1}); the cell may be empty or "
+                    f"the cell may not be focused -- both are failures here"
                 )
+                if attempt > retries:
+                    raise last_error
                 continue
 
             assert isinstance(got, str)
+
+            if _is_message_box_text(got):
+                # A Windows message box answers Ctrl+C with its own text, so this
+                # is the popup talking, not the cell.  Deal with the popup (the
+                # guard dismisses TME's save prompt, or stops for anything else)
+                # and read again rather than reporting a wrong value.
+                popup_reads += 1
+                if popup_reads > 3:
+                    raise CellReadTimeout(
+                        "a dialog kept answering the clipboard instead of the "
+                        "cell; stopping"
+                    )
+                self.guard()
+                continue
+
             if "\t" in got:
                 # Tabs mean this was a row copy, i.e. F2 never opened an editor.
                 # Esc now would cancel the dialog, so bail out without pressing it.
@@ -833,9 +892,6 @@ class TmeSession:
             self.throttle.observe(latency)
             self.reads += 1
             return CellRead(value=got, latency_s=latency)
-
-        assert last_error is not None
-        raise last_error
 
     def write_cell(self, value: str, *, commit: str = "enter") -> None:
         """Replace the focused cell's contents with ``value``.
