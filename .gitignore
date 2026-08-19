@@ -32,3 +32,7 @@ after_delete.png
 final_table.png
 ready.png
 delete_ghb.png
+
+# Read drawings and the schedules built from them are real client project data.
+# This remote is public -- keep them local, and see CLAUDE.md.
+drawings/
