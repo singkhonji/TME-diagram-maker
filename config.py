@@ -121,9 +121,34 @@ FOCUS_REACQUIRE_TIMEOUT_S = 3.0
 
 # Adaptive throttle bounds.  The runtime value is derived from measured latency;
 # these are only the hard clamps.  See tmeio.Throttle.
-KEY_DELAY_MIN_S = 0.008
+#
+# The floor equals the starting delay on purpose: the throttle may only ever slow
+# the keys down, never speed them up past the value that has been proven to work.
+# Measured 2026-08-19 on EE_Y1_BUILDING with the old 8 ms floor: TME answered in
+# 18 ms on average, well under the 50 ms baseline, so the throttle scaled the key
+# delay *down* to the clamp -- and at that spacing the grid began dropping
+# synthetic keys.  13 read timeouts in 33 seconds over 10 rows followed, an
+# editor was left open after one of them (a read that cannot prove an editor is
+# open must not send Esc), the write/read sequence slid out of step and a paste
+# eventually landed while the clipboard still held a read sentinel, which is how
+# "__TMEIO_SENTINEL_000141__" ended up inside a Cable Specification cell.
+# The run was also *slower* for it: 3.28 s/row against the 2.4 s/row measured
+# when the delay stayed at 15 ms.  Faster keys, less throughput.
+#
+# Raised again to 30 ms while the table was growing, on the evidence that read
+# timeouts tracked key spacing: 1.3 per row at 8 ms, 0.13 at 15 ms, none at
+# 30 ms.  That is worth having on its own -- a read that times out leaves a cell
+# editor open that nothing is allowed to close -- but note it did **not** fix the
+# rows that came out a column out of step.  That was Ctrl+Left landing short
+# (see grid.SchematicGrid.home), and it happened just the same at 30 ms.
+#
+# So this is a floor chosen for quiet reads, not for correctness, and it costs
+# real time: about 6.3 s per row against 3.7 s at 15 ms.  Now that the column
+# fault is fixed it is worth measuring 15 ms again on a whole building before
+# assuming 30 is needed.
+KEY_DELAY_MIN_S = 0.030
 KEY_DELAY_MAX_S = 0.200
-KEY_DELAY_START_S = 0.015
+KEY_DELAY_START_S = 0.030
 
 READ_TIMEOUT_MIN_S = 0.40
 READ_TIMEOUT_MAX_S = 2.50
@@ -140,6 +165,24 @@ CLIPBOARD_POLL_S = 0.015
 # win32clipboard can be locked by another app (Excel, Teams...); retry briefly.
 CLIPBOARD_OPEN_ATTEMPTS = 12
 CLIPBOARD_OPEN_BACKOFF_S = 0.02
+
+# Before pasting, wait for the clipboard to go quiet: this many consecutive polls
+# with an unchanged clipboard sequence number, or give up after the timeout.
+#
+# This guards the race the module docstring records: TME can still be finishing
+# its own clipboard write when we set ours, and the paste that follows would then
+# carry the previously read cell's text.  Checking the content once before
+# pasting leaves a gap; waiting for the sequence number to stop moving does not.
+#
+# Honesty about what this did *not* fix: it was added while chasing rows that
+# came out with the Cable Specification holding the previous cell's value, and it
+# made no difference -- tracing showed every write had landed in the right cell
+# with the right value all along, and the real cause was a Ctrl+Left that
+# sometimes stops a column short (see grid.SchematicGrid.home).  It is kept
+# because the race it closes is real and was observed before this project's
+# rewrite, not because it explains that failure.
+CLIPBOARD_SETTLE_SAMPLES = 3
+CLIPBOARD_SETTLE_TIMEOUT_S = 1.0
 
 # Virtual key code for the abort hotkey (F12).
 ABORT_VK = 0x7B

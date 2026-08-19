@@ -54,9 +54,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("workbook", nargs="?", default=config.DEFAULT_WORKBOOK)
     parser.add_argument("--dry-run", action="store_true",
                         help="print the key sequence without sending anything")
+    parser.add_argument("--start-at", default=None, metavar="BOARD",
+                        help="skip every board before this one, for resuming "
+                             "after a stop. The skipped boards must already be "
+                             "in the TME project, or a feeder pointing at one "
+                             "will have nothing to link to.")
     parser.add_argument("--limit-boards", type=int, default=None)
     parser.add_argument("--limit-rows", type=int, default=None,
                         help="stop after this many circuits per board")
+    parser.add_argument("--verbose", action="store_true",
+                        help="log every key sent and every value read back, for "
+                             "working out where a row went wrong")
     parser.add_argument("--force", action="store_true",
                         help="start even though the workbook has warnings")
     parser.add_argument("--auto-dismiss-save", action="store_true",
@@ -71,6 +79,17 @@ def main(argv: list[str] | None = None) -> int:
     except (ExcelStructureError, FileNotFoundError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
+
+    if args.start_at is not None:
+        names = [b.name for b in boards]
+        if args.start_at not in names:
+            print(f"ERROR: no board named {args.start_at!r} in the workbook; "
+                  f"it has {', '.join(names)}", file=sys.stderr)
+            return 2
+        skipped = names.index(args.start_at)
+        boards = boards[skipped:]
+        print(f"skipping the first {skipped} board(s); they must already be in "
+              f"the project\n")
 
     if args.limit_boards is not None:
         boards = boards[: args.limit_boards]
@@ -107,7 +126,9 @@ def main(argv: list[str] | None = None) -> int:
               "dialog still stops the run\n")
 
     with tmeio.TmeSession(
-        dry_run=args.dry_run, auto_dismiss_save=args.auto_dismiss_save
+        dry_run=args.dry_run,
+        verbose=args.verbose,
+        auto_dismiss_save=args.auto_dismiss_save,
     ) as session:
         table = grid.SchematicGrid(session)
         try:

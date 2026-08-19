@@ -252,6 +252,51 @@ def clip_get() -> str | object:
     raise TmeIoError(f"could not read the clipboard: {last}")
 
 
+def clipboard_sequence() -> int:
+    """Windows' clipboard change counter.
+
+    It ticks on every write by any process, so it is the one way to tell that a
+    write we did not make has landed -- ``clip_get`` only shows the content, and
+    an overwrite with the same text would be invisible.
+    """
+    return _user32.GetClipboardSequenceNumber()
+
+
+def clip_settle(text: str) -> None:
+    """Block until the clipboard holds ``text`` and has stopped changing.
+
+    TME finishes writing the clipboard after it has already answered a Ctrl+C.
+    Setting our own value and pasting straight away races that late write, and
+    losing the race pastes the previously read cell's text.  Waiting for the
+    sequence number to hold still means the paste only happens once nothing else
+    is in flight -- a condition, not a guessed delay.
+    """
+    deadline = time.monotonic() + config.CLIPBOARD_SETTLE_TIMEOUT_S
+    last = clipboard_sequence()
+    stable = 0
+    while time.monotonic() < deadline:
+        time.sleep(config.CLIPBOARD_POLL_S)
+        current = clipboard_sequence()
+        if current == last:
+            stable += 1
+            if stable >= config.CLIPBOARD_SETTLE_SAMPLES:
+                if clip_get() == text:
+                    return
+                # Something else won; take the clipboard back and start over.
+                clip_set(text)
+                last = clipboard_sequence()
+                stable = 0
+        else:
+            last = current
+            stable = 0
+
+    raise TmeIoError(
+        f"the clipboard would not settle on {text!r} within "
+        f"{config.CLIPBOARD_SETTLE_TIMEOUT_S:.1f} s; refusing to paste into a "
+        f"cell while another write is still in flight"
+    )
+
+
 def clip_set(text: str) -> None:
     """Put ``text`` on the clipboard and confirm it stuck.
 
@@ -742,8 +787,8 @@ class TmeSession:
         """Press and release each key in turn."""
         self.guard()
         for name in names:
+            self._trace(f"tap {name}")
             if self.dry_run:
-                self._trace(f"tap {name}")
                 continue
             _send([_key_event(name, up=False)])
             time.sleep(self.throttle.key_delay_s)
@@ -753,8 +798,8 @@ class TmeSession:
     def chord(self, modifier: str, key: str) -> None:
         """Hold ``modifier``, tap ``key``, release -- e.g. ``chord("ctrl", "v")``."""
         self.guard()
+        self._trace(f"chord {modifier}+{key}")
         if self.dry_run:
-            self._trace(f"chord {modifier}+{key}")
             return
         _send([_key_event(modifier, up=False)])
         time.sleep(self.throttle.key_delay_s)
@@ -853,6 +898,10 @@ class TmeSession:
                 if not expect_empty:
                     self.throttle.penalize()
                 attempt += 1
+                self._trace(
+                    f"read -> NO ANSWER (attempt {attempt}; the editor, if "
+                    f"F2 opened one, is left open on purpose)"
+                )
                 last_error = CellReadTimeout(
                     f"no clipboard answer within "
                     f"{(timeout_s or self.throttle.read_timeout_s) * 1000:.0f} ms "
@@ -888,6 +937,7 @@ class TmeSession:
                     f"to send Esc, which would cancel the System Diagram dialog."
                 )
 
+            self._trace(f"read -> {got!r} ({latency * 1000:.0f} ms)")
             self.tap("esc")  # safe: proven to be inside a cell editor
             self.throttle.observe(latency)
             self.reads += 1
@@ -910,19 +960,21 @@ class TmeSession:
             self.writes += 1
             return
 
+        self._trace(f"write <- {value!r}")
         clip_set(value)
         self.tap("f2")
 
         # Confirm again immediately before pasting.  Between the two points TME
         # has processed an F2, and pasting whatever is on the clipboard rather
         # than what we meant to write is a silent corruption.
+        #
+        # Comparing the content once is not enough: TME's own clipboard write
+        # from the read-back before this one can still be in flight and land
+        # between the check and the paste.  clip_settle waits for the clipboard
+        # sequence number to stop moving first, so nothing is on its way in.
         if clip_get() != value:
             clip_set(value)
-            if clip_get() != value:
-                raise TmeIoError(
-                    f"the clipboard no longer holds {value!r} at paste time; "
-                    f"refusing to paste something else into the cell"
-                )
+        clip_settle(value)
 
         self.chord("ctrl", "v")
         if commit:

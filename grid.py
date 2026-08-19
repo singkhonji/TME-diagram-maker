@@ -51,9 +51,28 @@ class SchematicGrid:
 
     # -- navigation --------------------------------------------------------
 
+    # Ctrl+Left mostly lands on column one, but not always: traced 2026-08-19,
+    # the Ctrl+Left that starts a row sweep landed on Circuit Number instead of
+    # Name, one column short.  Same key sequence as the row before it, which had
+    # landed correctly -- the only difference was that the read before it came
+    # back in 0 ms rather than 27 ms, so it is a timing flake in TME, not
+    # something about the row.
+    #
+    # It is not a harmless flake.  The sweep then reads every column one place
+    # to the right, reports the whole row as wrong, and the retry rewrites it
+    # from the wrong column -- which is what actually corrupts the row.  The
+    # write before it had been correct in every cell.
+    #
+    # Plain Left at column one does nothing (measured: three extra taps, still
+    # on Name), so following up with a couple of them costs nothing when
+    # Ctrl+Left worked and fixes it when it did not.
+    HOME_BACKSTOP_TAPS = 2
+
     def home(self) -> None:
         """Move to column one of the current row."""
         self.s.chord("ctrl", "left")
+        for _ in range(self.HOME_BACKSTOP_TAPS):
+            self.s.tap("left")
 
     def goto(self, key: str) -> None:
         """Put focus on column ``key`` of the current row, starting from home."""
@@ -149,17 +168,27 @@ class SchematicGrid:
         mismatches: list[Mismatch] = []
         self.home()
         for index, key in enumerate(config.COLUMN_KEYS):
-            if key in config.VERIFY_KEYS:
+            if key in config.VERIFY_KEYS and wanted[key]:
                 expected = wanted[key]
-                got = self._read(expect_empty=not expected)
-                if expected:
-                    if got != expected:
-                        mismatches.append(Mismatch(key, expected, got))
-                elif got is not None:
-                    # Meant to be blank but something is in it.  The reverse --
-                    # silence where a value is expected -- is caught above,
-                    # because an empty cell and a dropped copy look identical.
-                    mismatches.append(Mismatch(key, "", got))
+                got = self._read()
+                if got != expected:
+                    mismatches.append(Mismatch(key, expected, got))
+            # A cell that is meant to be blank is skipped rather than read.
+            # Reading one proves nothing either way -- an empty cell answers
+            # Ctrl+C with silence, which is indistinguishable from a dropped
+            # copy -- and it actively costs: the F2 that precedes the copy
+            # leaves an editor open that nothing is allowed to close (a bare Esc
+            # would cancel the whole dialog), so the next right arrow types into
+            # that editor instead of moving a column, and every remaining cell
+            # in the sweep reads one place out.  Traced 2026-08-19 on DB-GH-B
+            # L-TIMER, the one row in the schedule with no Cable Specification:
+            # the sweep reported Terminal Load, System and Remarks all wrong
+            # when the row itself was fine.
+            #
+            # Nothing is lost that was reliable.  Column alignment is proven by
+            # the Name cell TME generates at the start of the sweep, and a
+            # value landing in a cell that should be blank would push the row
+            # out of step and show up there.
             if index < config.N_COLUMNS - 1:
                 self.s.tap("right")
         return mismatches
