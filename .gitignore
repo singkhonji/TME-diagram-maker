@@ -19,3 +19,16 @@ Test Schedule.xlsx
 
 # Superseded by README.md, which is the source of truth for how this works
 cubicost-tme-automation-spec.md
+
+# Run and diagnostic logs
+*.log
+bash.exe.stackdump
+
+# Window captures taken while debugging a run
+stopped*.png
+delete_target*.png
+before_delete.png
+after_delete.png
+final_table.png
+ready.png
+delete_ghb.png
