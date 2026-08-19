@@ -1,3 +1,5 @@
 openpyxl>=3.1
 pywin32>=306
 pillow>=10.0
+pypdfium2>=4.30
+PyYAML>=6.0
