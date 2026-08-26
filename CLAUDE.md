@@ -10,14 +10,31 @@ A pipeline that turns an electrical Single Line Diagram into filled-in rows of
 Cubicost TME's Schematic Table:
 
 ```
-drawing PDF -> pdfcrop.py -> read by eye -> drawings/<sheet>.yaml
-            -> build_schedule.py -> <sheet>-schedule.xlsx
-            -> run_fill.py -> TME
+drawing PDF -> tme.cli.pdfcrop -> read by eye
+            -> projects/<client>/buildings/<slug>/drawing.yaml
+            -> tme.cli.build    -> .../schedule.xlsx
+            -> tme.cli.fill_all -> TME
 ```
 
-Every stage is separable. `excel_reader.py`, `build_schedule.py` and `pdfcrop.py`
-run without TME open; only `run_fill.py`, `delete_boards.py`, `diagnose_row.py`
-and `probe.py` touch the application.
+Every stage is separable. `tme/schedule/` and `tme/cli/pdfcrop.py` run without
+TME open; only `tme/cli/fill.py`, `tme/cli/fill_all.py` and the three modules in
+`tme/tools/` touch the application. `tme/win/` is the whole Windows surface --
+if anything here ever needs porting, that is the directory.
+
+## Where things are
+
+`tme/` is the engine and is client-agnostic. `projects/<client>/buildings/<slug>/`
+holds one building: the `drawing.yaml` read off the sheet, the `schedule.xlsx`
+built from it, and a `runs/` folder for everything a fill against it produced.
+
+`projects/` is gitignored in one line, so a new client inherits the protection.
+Nothing under it may reach a public remote -- see the last section of this file.
+
+A new client is a new folder: `projects/<slug>/project.yaml` for the conventions
+agreed with them, then one folder per building. Cable specs stay in each
+building's `drawing.yaml` on purpose. A shared spec is a spec nobody re-read
+against the sheet in front of them, and re-reading is the step that catches the
+traps in "Reading a drawing" below.
 
 ## The three rules that matter most
 
@@ -51,7 +68,7 @@ sessions were lost that way. What worked:
 2. Find a row that **worked** and put its trace next to the row that failed.
    Identical key sequences with different outcomes narrow it to one variable
    immediately.
-3. `diagnose_row.py` replays one row's write/verify with tracing. It refuses to
+3. `tme/tools/diagnose_row.py` replays one row's write/verify with tracing. It refuses to
    write unless the focused row's Circuit Number matches, so point it at a row
    that is already broken and due for deletion.
 
@@ -59,25 +76,27 @@ Do not read cells in the `NEVER_F2_KEYS` columns. F2 on Conduit Size raises
 "Please enter an integer between [10,5000]" and on Elevation "Elevation input
 error", and the dialog then blocks everything after it.
 
-## Shell traps that have burned this project
+## Traps that have burned this project
 
-**Never pipe `run_fill.py` through `tee`, and never follow it with `; echo`.**
-A shell pipeline reports the *last* command's exit status, so a failed run comes
-back as success. Redirect to a file and read the log.
+**`tme/tools/delete_boards.py` only deletes the topmost board.** A partial board
+anywhere else has to be removed by hand in TME: click its board row, then
+`Delete Row`.
 
-**`delete_boards.py` only deletes the topmost board.** A partial board anywhere
-else has to be removed by hand in TME: click its board row, then `Delete Row`.
+**Resume rather than restart.** `python -m tme.cli.fill_all <building> --from BOARD`
+picks up where a stop left off. It runs one process per board, so boards already
+verified are never rewritten -- but the skipped boards must already exist in the
+project, or a feeder pointing at one has nothing to link to.
 
-**Resume rather than restart.** `run_fill.py --start-at BOARD --limit-boards 1`
-in a shell loop does one board per process and stops at the first failure, so
-boards already verified are never rewritten. The skipped boards must already
-exist in the project, or a feeder pointing at one has nothing to link to.
+**Do not pipe a fill through `tee`, and do not follow it with `; echo`.** A shell
+pipeline reports the *last* command's exit status, so a failed run comes back as
+success. This is why `fill_all` is Python and writes to `runs/fill.log` itself;
+the trap is still live for anything you run by hand.
 
 ## Reading a drawing
 
 These PDFs are CAD exports with the text converted to outlines — `pdfplumber`
 finds zero characters per page and `pdftotext` returns nothing. There is no
-extraction shortcut; the labels have to be looked at. `pdfcrop.py --scale 2.6`
+extraction shortcut; the labels have to be looked at. `tme.cli.pdfcrop --scale 2.6`
 is legible on an A1 sheet, and `--rotate cw` turns the vertical load
 descriptions upright.
 
