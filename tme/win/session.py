@@ -67,10 +67,16 @@ class TmeSession:
         dry_run: bool = False,
         verbose: bool = False,
         auto_dismiss_save: bool = False,
+        intruder_shot: str = "interrupted_by.png",
     ) -> None:
         self.dry_run = dry_run
         self.verbose = verbose
         self.auto_dismiss_save = auto_dismiss_save
+        # Where a picture of an unexpected popup is saved when the run stops
+        # for one, so the user can see what interrupted it rather than just a
+        # window title.  Passed in, not a global: it belongs to the run, and
+        # two buildings must not overwrite each other's evidence.
+        self.intruder_shot = intruder_shot
         self.throttle = Throttle()
         self.abort = AbortWatch()
         self.hwnd: int | None = None
@@ -120,7 +126,7 @@ class TmeSession:
             return
 
         detail = describe_window(intruder)
-        shot = capture_window(intruder, config.INTRUDER_SHOT_FILE)
+        shot = capture_window(intruder, self.intruder_shot)
 
         # A Qt window owned by TME is one of its own modals -- the save prompt,
         # the duplicate-board-name question, or a validation complaint.  Anything
@@ -198,9 +204,9 @@ class TmeSession:
                 break
             time.sleep(0.1)
         else:
-            capture_window(hwnd, config.INTRUDER_SHOT_FILE)
+            capture_window(hwnd, self.intruder_shot)
             print(f"    the save prompt did not close (see "
-                  f"{config.INTRUDER_SHOT_FILE}); stopping instead")
+                  f"{self.intruder_shot}); stopping instead")
             return False
 
         assert self.hwnd is not None

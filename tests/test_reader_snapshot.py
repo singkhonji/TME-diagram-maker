@@ -44,3 +44,23 @@ def test_reader_output_is_unchanged(slug: str) -> None:
     if slug not in stored:
         pytest.skip(f"{slug} not in the snapshot")
     assert summarise(workbook) == stored[slug]
+
+
+def test_a_blank_system_takes_the_spare_system_passed_in() -> None:
+    """The one branch no committed workbook reaches.
+
+    build.py writes a System into every row, so reading a real schedule back
+    never exercises the fallback -- a broken wiring would pass every other
+    test in this file.
+    """
+    from tme.schedule.reader import _resolve_circuit
+    from tme import config
+
+    raw = {key: "" for key in config.COLUMN_KEYS}
+    raw["circuit_number"] = "L1"
+    raw["cable_spec"] = "SPARE"
+
+    circuit = _resolve_circuit(2, raw, "Fire Alarm System")
+
+    assert circuit.is_spare
+    assert circuit.values["system"] == "Fire Alarm System"

@@ -13,6 +13,9 @@ import pytest
 
 MODULES = [
     "tme.config",
+    "tme.conventions",
+    "tme.project",
+    "tme.paths",
     "tme.schedule.reader",
     "tme.schedule.build",
     "tme.cli.pdfcrop",

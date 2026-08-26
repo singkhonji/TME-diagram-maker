@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 import openpyxl
 
-from tme import config
+from tme import config, conventions
 
 
 class ExcelStructureError(Exception):
@@ -66,9 +66,16 @@ def _cell_text(value: object) -> str:
     return str(value).strip()
 
 
-def _resolve_circuit(row_idx: int, raw: dict[str, str]) -> Circuit:
-    """Turn one raw Excel row into intended values + the subset to type."""
-    is_spare = raw["cable_spec"].upper() == config.SPARE_MARKER
+def _resolve_circuit(
+    row_idx: int, raw: dict[str, str], spare_system: str
+) -> Circuit:
+    """Turn one raw Excel row into intended values + the subset to type.
+
+    ``spare_system`` is the client rule for what System a spare way takes;
+    it is passed in rather than read from a global so that one workbook
+    cannot be resolved two different ways depending on who called.
+    """
+    is_spare = raw["cable_spec"].upper() == conventions.SPARE_MARKER
 
     values: dict[str, str] = {}
     for key in config.COLUMN_KEYS:
@@ -79,7 +86,7 @@ def _resolve_circuit(row_idx: int, raw: dict[str, str]) -> Circuit:
             values[key] = ""
             continue
 
-        if cell == config.SKIP_TOKEN:
+        if cell == conventions.SKIP_TOKEN:
             # Explicitly "leave TME's default alone" -- still verified.
             values[key] = config.CIRCUIT_DEFAULTS[key]
             continue
@@ -87,7 +94,7 @@ def _resolve_circuit(row_idx: int, raw: dict[str, str]) -> Circuit:
         if key == "system" and not cell:
             # Spare ways have System blank in Excel; user's rule is to match the
             # rest of the board rather than leave TME's Lighting System default.
-            values[key] = config.SPARE_SYSTEM_FALLBACK
+            values[key] = spare_system
             continue
 
         values[key] = cell
@@ -100,8 +107,17 @@ def _resolve_circuit(row_idx: int, raw: dict[str, str]) -> Circuit:
     return Circuit(excel_row=row_idx, values=values, write=write, is_spare=is_spare)
 
 
-def load_boards(path: str) -> tuple[list[Board], list[str]]:
-    """Parse the workbook.  Returns (boards, warnings); raises on bad structure."""
+def load_boards(
+    path: str, *, spare_system: str | None = None
+) -> tuple[list[Board], list[str]]:
+    """Parse the workbook.  Returns (boards, warnings); raises on bad structure.
+
+    ``spare_system`` defaults to the built-in convention.  Callers that know
+    which client a workbook belongs to pass that client's rule instead --
+    see tme.project.
+    """
+    if spare_system is None:
+        spare_system = conventions.SPARE_SYSTEM_FALLBACK
     workbook = openpyxl.load_workbook(path, data_only=True, read_only=True)
     sheet = workbook.worksheets[0]
     rows = list(sheet.iter_rows(values_only=True))
@@ -130,7 +146,7 @@ def load_boards(path: str) -> tuple[list[Board], list[str]]:
         if not any(raw.values()):
             continue  # blank spacer row
 
-        is_board_row = bool(raw["name"]) and raw["name"] != config.AUTO_NAME_TOKEN \
+        is_board_row = bool(raw["name"]) and raw["name"] != conventions.AUTO_NAME_TOKEN \
             and not raw["circuit_number"]
 
         if is_board_row:
@@ -147,7 +163,7 @@ def load_boards(path: str) -> tuple[list[Board], list[str]]:
             warnings.append(f"row {offset}: circuit has no Circuit Number -- skipped")
             continue
 
-        circuit = _resolve_circuit(offset, raw)
+        circuit = _resolve_circuit(offset, raw, spare_system)
 
         # A tab or newline inside a value would silently break clipboard paste
         # (TME would treat it as a cell/row separator).
@@ -221,7 +237,7 @@ def print_report(boards: list[Board], warnings: list[str]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("workbook", nargs="?", default=config.DEFAULT_WORKBOOK)
+    parser.add_argument("workbook", help="a built schedule .xlsx")
     parser.add_argument("--report", action="store_true", help="print the summary")
     parser.add_argument(
         "--dump", action="store_true", help="print every row's expected nine cells"

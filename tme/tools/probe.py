@@ -296,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--only", help="comma-separated step codes, e.g. V1,V2")
     parser.add_argument("--no-shots", action="store_true")
-    parser.add_argument("--out", default=config.PROBE_RESULTS_FILE)
+    parser.add_argument("--out", default="probe_results.json")
     args = parser.parse_args(argv)
 
     only = set(args.only.upper().split(",")) if args.only else None
