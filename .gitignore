@@ -33,6 +33,7 @@ final_table.png
 ready.png
 delete_ghb.png
 
-# Read drawings and the schedules built from them are real client project data.
-# This remote is public -- keep them local, and see CLAUDE.md.
-drawings/
+# Client project data: drawings read by eye, the schedules built from them, and
+# everything a run against them produced.  This remote is public -- keep the
+# whole tree local, and see CLAUDE.md.  One rule so a new client inherits it.
+projects/

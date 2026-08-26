@@ -72,14 +72,14 @@ MSB-Y2
 → ดึงข้อความด้วยโค้ดไม่ได้ ต้อง render เป็นภาพแล้วอ่านด้วยตา
 
 ```bash
-python pdfcrop.py "01 BLD_Y1 Only Load Diagram.pdf" 2 --box 0.05 0.03 0.26 0.26 --scale 2.6
+python -m tme.cli.pdfcrop "01 BLD_Y1 Only Load Diagram.pdf" 2 --box 0.05 0.03 0.26 0.26 --scale 2.6
 ```
 
 `--box L T R B` เป็นสัดส่วนของหน้า (0–1 นับจากมุมบนซ้าย) · `--scale 2.6` ≈ 190 DPI อ่านตัวหนังสือในแบบ A1 ออกชัด
 คำอธิบายโหลดกับ cable spec ในแบบวางตั้ง อ่านจากล่างขึ้นบน → ใส่ `--rotate cw` แล้วจะอ่านเป็นแนวนอนปกติ
 `--grid ROWS COLS` แบ่งทั้งหน้าเป็น tile ให้อัตโนมัติ
 
-สิ่งที่อ่านได้บันทึกลง `drawings/<ชื่อแบบ>.yaml` ซึ่งเขียนตามรูปแบบที่แบบมาร์กไว้จริง —
+สิ่งที่อ่านได้บันทึกลง `projects/<ลูกค้า>/buildings/<อาคาร>/drawing.yaml` ซึ่งเขียนตามรูปแบบที่แบบมาร์กไว้จริง —
 กลุ่มวงจรที่ใช้คำอธิบายโหลด พิกัด breaker และสายชุดเดียวกันอยู่ในกลุ่มเดียว จึงตรวจทานเทียบกับแบบได้ตรงๆ
 ไม่ต้องไล่ทีละแถวใน spreadsheet
 
@@ -110,7 +110,7 @@ python pdfcrop.py "01 BLD_Y1 Only Load Diagram.pdf" 2 --box 0.05 0.03 0.26 0.26 
 แล้วสร้าง Excel:
 
 ```bash
-python build_schedule.py drawings/BLD_Y1.yaml
+python -m tme.cli.build projects/mrdiy/buildings/Y1
 ```
 
 ตัวสร้างจัดการให้เอง 3 อย่างที่พลาดง่ายถ้าทำมือ
@@ -119,7 +119,7 @@ python build_schedule.py drawings/BLD_Y1.yaml
 |---|---|
 | **เลขวงจรซ้ำในตู้เดียว** | ตู้ DB แบ่งเป็น section `L` / `P` / `AC` และ `R1 Y1 B1` เริ่มใหม่ทุก section → เติม prefix เป็น `L-R1`, `P-R1`, `AC-R1` เพราะ TME ตั้งชื่อแถวเป็น `<ชื่อตู้>-<Circuit Number>` ถ้าซ้ำจะพัง |
 | **ลำดับตู้ลูกก่อนตู้แม่** | เรียงด้วย topological sort จาก field `to` — TME ผูกตู้ลูกได้ก็ต่อเมื่อตู้ลูกมีอยู่จริงแล้ว |
-| **ตรวจไฟล์ที่ตัวเองเขียน** | อ่านกลับผ่าน `excel_reader.load_boards()` (ตัวเดียวกับที่ `run_fill.py` ใช้) แล้ว fail ถ้ามี warning |
+| **ตรวจไฟล์ที่ตัวเองเขียน** | อ่านกลับผ่าน `tme.schedule.reader.load_boards()` (ตัวเดียวกับที่ตัวกรอกใช้) แล้ว fail ถ้ามี warning |
 
 ### กับดักตอนอ่านแบบ
 
@@ -138,7 +138,7 @@ python build_schedule.py drawings/BLD_Y1.yaml
 **1. ตรวจ Excel ก่อน** (ไม่ต้องเปิด TME — ทำได้ตั้งแต่ยังไม่ถึงหน้างาน)
 
 ```bash
-python excel_reader.py "your-schedule.xlsx" --report
+python -m tme.schedule.reader projects/mrdiy/buildings/Y1/schedule.xlsx --report
 ```
 
 ต้องขึ้น `no warnings` ก่อนจึงจะรันจริงได้ ตัวตรวจจะเตือนถ้าเจอ **ชื่อตู้ซ้ำ**
@@ -155,7 +155,17 @@ python excel_reader.py "your-schedule.xlsx" --report
 **3. รัน**
 
 ```bash
-python run_fill.py "your-schedule.xlsx"
+python -m tme.cli.fill_all projects/mrdiy/buildings/Y1
+```
+
+รันทีละตู้ ตู้ละหนึ่ง process ลำดับอ่านจาก workbook เอง (ตู้ลูกก่อนตู้แม่) หยุดที่ตู้แรกที่พัง
+log เขียนลง `<โฟลเดอร์อาคาร>/runs/fill.log` · `--from BOARD` รันต่อจากตู้ที่ค้าง ·
+`--dry-run` พิมพ์ลำดับตู้เฉยๆ ไม่แตะ TME
+
+ถ้าจะรันตู้เดียวหรือใช้ตัวเลือกละเอียด ใช้ `tme.cli.fill` ตรงๆ:
+
+```bash
+python -m tme.cli.fill projects/mrdiy/buildings/Y1 --start-at MSB-Y1 --limit-boards 1
 ```
 
 | ตัวเลือก | ทำอะไร |
@@ -178,8 +188,8 @@ python run_fill.py "your-schedule.xlsx"
 ถ้ารันผิดต้องลบด้วยมือ:
 
 ```bash
-python delete_boards.py       # ลบตู้บนสุด
-python delete_boards.py 5     # ลบได้ถึง 5 ตู้ หยุดเองเมื่อตารางว่าง
+python -m tme.tools.delete_boards       # ลบตู้บนสุด
+python -m tme.tools.delete_boards 5     # ลบได้ถึง 5 ตู้ หยุดเองเมื่อตารางว่าง
 ```
 
 **สำรองไฟล์โปรเจกต์ก่อนรันจริงทุกครั้ง**
@@ -188,10 +198,11 @@ python delete_boards.py 5     # ลบได้ถึง 5 ตู้ หยุ�
 
 ## เมื่อหยุดกลางคัน
 
-โปรแกรมจะบอกตำแหน่งชัดเจน (ตู้ / แถว / คอลัมน์ / ค่าที่ควรได้ vs ที่ได้จริง) เขียน `.state.json` ไว้
-และถ้าเป็นเพราะมี popup มาบัง จะ**ถ่ายรูป popup นั้นเก็บไว้ให้** ที่ `interrupted_by.png`
+โปรแกรมจะบอกตำแหน่งชัดเจน (ตู้ / แถว / คอลัมน์ / ค่าที่ควรได้ vs ที่ได้จริง) เขียน `runs/state.json` ไว้
+และถ้าเป็นเพราะมี popup มาบัง จะ**ถ่ายรูป popup นั้นเก็บไว้ให้** ที่ `runs/interrupted_by.png`
+ทั้งคู่อยู่ในโฟลเดอร์อาคารที่รัน ไม่ปนกับอาคารอื่น
 
-**ก่อนรันตู้เดิมซ้ำ ต้องลบตู้ที่กรอกค้างก่อน** ด้วย `delete_boards.py`
+**ก่อนรันตู้เดิมซ้ำ ต้องลบตู้ที่กรอกค้างก่อน** ด้วย `tme.tools.delete_boards`
 เพราะไม่มี undo และชื่อตู้ซ้ำจะทำให้ TME เด้งถาม Merge/New
 
 ### popup "Save current project?"
@@ -296,25 +307,65 @@ TME copy ด้วย `EmptyClipboard()` แล้วค่อย `SetClipboardD
 เปิด Claude Code ที่โฟลเดอร์นี้แล้วสั่งได้เลย เช่น
 
 - *"รัน `--dry-run` กับ Excel ไฟล์นี้แล้วบอกหน่อยว่ามีปัญหาอะไรไหม"*
-- *"มันหยุดที่ตู้ DB-... ช่วยดู `.state.json` กับ `interrupted_by.png` ให้หน่อย"*
+- *"มันหยุดที่ตู้ DB-... ช่วยดู `runs/state.json` กับ `runs/interrupted_by.png` ให้หน่อย"*
 - *"เพิ่มการรองรับคอลัมน์ Conduit Size"*
 
-`probe.py` คือชุดวัดพฤติกรรม TME — ถ้า TME อัปเดตเวอร์ชันแล้วอะไรเพี้ยน ให้รันตัวนี้กับ
+`tme.tools.probe` คือชุดวัดพฤติกรรม TME — ถ้า TME อัปเดตเวอร์ชันแล้วอะไรเพี้ยน ให้รันตัวนี้กับ
 **โปรเจกต์ทดสอบเปล่า** ก่อน แล้วเทียบผลกับตารางข้างบน
 
 ---
 
 ## ไฟล์
 
+### ข้อมูลลูกค้า — `projects/` (gitignore ทั้งก้อน)
+
 | ไฟล์ | หน้าที่ |
 |---|---|
-| `pdfcrop.py` | render ส่วนของหน้าแบบ PDF เป็นภาพ เพื่ออ่านตัวหนังสือที่ถูกแปลงเป็นเส้นโค้ง |
-| `drawings/*.yaml` | สิ่งที่อ่านได้จากแบบ — ตู้ วงจร สาย พิกัด และตู้ลูก (ไฟล์ที่คนตรวจ) |
-| `build_schedule.py` | YAML → Excel ตาม template พร้อมเรียงตู้ลูกก่อนตู้แม่และตรวจไฟล์ตัวเอง |
-| `run_fill.py` | ตัวรันหลัก |
-| `excel_reader.py` | อ่าน + ตรวจ Excel (ทำงานได้โดยไม่ต้องเปิด TME) |
-| `grid.py` | ตรรกะระดับแถว/ตู้ และการตรวจสอบ |
-| `tmeio.py` | คีย์บอร์ด, clipboard, focus guard, throttle, ปุ่มหยุดฉุกเฉิน |
-| `probe.py` | ชุดวัดพฤติกรรม TME (ใช้กับโปรเจกต์ทดสอบเท่านั้น) |
-| `delete_boards.py` | ลบตู้ (ใช้ตอนรันซ้ำหลังหยุดกลางคัน) |
-| `config.py` | ค่าคงที่ ลำดับคอลัมน์ และกฎต่างๆ |
+| `projects/<ลูกค้า>/project.yaml` | ข้อตกลงระดับโครงการ (ชื่อลูกค้า, System ของช่อง SPARE) |
+| `projects/<ลูกค้า>/buildings/<อาคาร>/drawing.yaml` | สิ่งที่อ่านได้จากแบบ — ตู้ วงจร สาย พิกัด และตู้ลูก (ไฟล์ที่คนตรวจ) |
+| `.../schedule.xlsx` | Excel ที่สร้างจาก YAML — ไฟล์ที่คนอนุมัติก่อนป้อนเข้า TME |
+| `.../runs/` | ผลจากการรัน: `fill.log`, `state.json`, `interrupted_by.png` |
+
+**spec สายไฟอยู่ในไฟล์ของแต่ละอาคาร ไม่ยกขึ้นไปแชร์** — spec ที่แชร์คือ spec ที่ไม่มีใครอ่านทวน
+กับแบบแผ่นนั้น ซึ่งคือขั้นตอนที่จับเครื่องหมายซ้ำและป้ายสลับข้างได้
+
+### เอนจิน — `tme/` (ไม่ผูกกับลูกค้า)
+
+| ไฟล์ | หน้าที่ |
+|---|---|
+| `tme/cli/pdfcrop.py` | render ส่วนของหน้าแบบ PDF เป็นภาพ เพื่ออ่านตัวหนังสือที่ถูกแปลงเป็นเส้นโค้ง |
+| `tme/schedule/build.py` | YAML → Excel ตาม template พร้อมเรียงตู้ลูกก่อนตู้แม่และตรวจไฟล์ตัวเอง |
+| `tme/schedule/reader.py` | อ่าน + ตรวจ Excel (ทำงานได้โดยไม่ต้องเปิด TME) |
+| `tme/cli/fill.py` | ตัวรันหลัก ทีละตู้หรือหลายตู้ |
+| `tme/cli/fill_all.py` | รันทุกตู้ ตู้ละ process ลำดับอ่านจาก workbook |
+| `tme/grid.py` | ตรรกะระดับแถว/ตู้ และการตรวจสอบ |
+| `tme/win/` | ทั้งชั้นที่ผูกกับ Windows — คีย์บอร์ด, clipboard, หน้าต่าง, focus guard, throttle, ปุ่มหยุดฉุกเฉิน |
+| `tme/tools/probe.py` | ชุดวัดพฤติกรรม TME (ใช้กับโปรเจกต์ทดสอบเท่านั้น) |
+| `tme/tools/delete_boards.py` | ลบตู้ (ใช้ตอนรันซ้ำหลังหยุดกลางคัน) |
+| `tme/tools/diagnose_row.py` | เล่นซ้ำการเขียน/ตรวจของแถวเดียว พร้อม trace |
+| `tme/config.py` | ค่าคงที่ที่**วัดมาจาก TME** — ลำดับคอลัมน์ จังหวะคีย์ การรู้จัก save prompt |
+| `tme/conventions.py` | ธรรมเนียมของ Excel เราเอง — `[SKIP]`, `SPARE` |
+| `tme/paths.py` | `RunPaths` — ผลรันไปอยู่ที่ไหน คิดจากโฟลเดอร์อาคาร |
+| `tme/project.py` | อ่าน `project.yaml` ของลูกค้า |
+
+---
+
+## เทสต์
+
+```bash
+python -m pytest
+```
+
+ครอบ 4 อย่าง และที่สำคัญกว่าคือรู้ว่า**ไม่**ครอบอะไร:
+
+- ทุกโมดูล import ผ่าน
+- `RunPaths` ชี้ตำแหน่งผลรันถูก และ `project.yaml` ถูกอ่านจริง
+- สร้าง Excel ใหม่จาก YAML ของแต่ละอาคาร แล้วได้ตรงกับไฟล์ที่อนุมัติแล้วทุกเซลล์
+- `load_boards` คืนตู้ จำนวนวงจร และ warning เท่าเดิม
+
+เทสต์ golden กับ snapshot ต้องมีข้อมูลใน `projects/` ถ้าไม่มีจะ skip พร้อมข้อความ —
+clone ที่ไม่มีข้อมูลลูกค้าคือ clone ที่ถูกต้อง
+
+**ตั้งแต่ `tme/grid.py` เข้าไปไม่มีอะไรครอบเลย** ไม่มีเทสต์ไหนขับ TME ได้
+รันจริงครั้งแรกหลังแก้ `tme/win/` หรือ `tme/grid.py` ให้รัน**ตู้เดียว** บนไฟล์โปรเจกต์ที่สำรองแล้ว
+และมีคนนั่งดู — ไม่ใช่ซัดรวด 16 ตู้

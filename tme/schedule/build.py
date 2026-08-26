@@ -31,8 +31,8 @@ from pathlib import Path
 import openpyxl
 import yaml
 
-import config
-from excel_reader import ExcelStructureError, load_boards, print_report
+from tme import config, conventions, project
+from tme.schedule.reader import ExcelStructureError, load_boards, print_report
 
 
 class DrawingError(Exception):
@@ -65,7 +65,7 @@ def board_rows(board: dict) -> list[list[str]]:
             system = group.get("system", section_system)
 
             if spare:
-                cable = config.SPARE_MARKER
+                cable = conventions.SPARE_MARKER
             elif group.get("no_cable"):
                 cable = ""
             else:
@@ -84,13 +84,13 @@ def board_rows(board: dict) -> list[list[str]]:
 
             for ref in refs:
                 rows.append([
-                    config.AUTO_NAME_TOKEN,
+                    conventions.AUTO_NAME_TOKEN,
                     circuit_number(prefix, str(ref)),
                     cable,
                     terminal,
-                    config.SKIP_TOKEN,
+                    conventions.SKIP_TOKEN,
                     "",
-                    config.SKIP_TOKEN,
+                    conventions.SKIP_TOKEN,
                     system,
                     remarks,
                 ])
@@ -172,19 +172,32 @@ def build(drawing_path: str, out_path: str) -> tuple[int, int]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("drawing", help="drawings/*.yaml")
+    parser.add_argument(
+        "target",
+        help="a building folder (projects/<client>/buildings/<slug>) whose "
+             "drawing.yaml is read and schedule.xlsx written, or a path to a "
+             "single YAML file",
+    )
     parser.add_argument("-o", "--out", default=None,
-                        help="output workbook (default: alongside the yaml)")
+                        help="output workbook (default: schedule.xlsx in the "
+                             "building folder)")
     parser.add_argument("--allow-warnings", action="store_true",
                         help="write the workbook even if the read-back warns")
     args = parser.parse_args(argv)
 
-    out = args.out or str(Path(args.drawing).with_name(
-        Path(args.drawing).stem + "-schedule.xlsx"
-    ))
+    # A building folder names its own files; a loose YAML keeps the old rule.
+    # Without this branch a drawing.yaml would build drawing-schedule.xlsx,
+    # while RunPaths looks for schedule.xlsx -- build and fill would disagree.
+    target = Path(args.target)
+    if target.is_dir():
+        drawing = target / "drawing.yaml"
+        out = args.out or str(target / "schedule.xlsx")
+    else:
+        drawing = target
+        out = args.out or str(drawing.with_name(drawing.stem + "-schedule.xlsx"))
 
     try:
-        n_boards, n_circuits = build(args.drawing, out)
+        n_boards, n_circuits = build(str(drawing), out)
     except (DrawingError, yaml.YAMLError, FileNotFoundError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
@@ -193,7 +206,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # Read it back through the filler's own checker rather than trusting it.
     try:
-        parsed, warnings = load_boards(out)
+        settings = project.load(drawing.parent)
+        parsed, warnings = load_boards(
+            out, spare_system=settings.spare_system_fallback
+        )
     except ExcelStructureError as exc:
         print(f"ERROR: the workbook just written does not parse: {exc}",
               file=sys.stderr)

@@ -27,7 +27,7 @@ import win32api
 import win32con
 import win32gui
 
-import tmeio
+from tme import win as tmeio
 
 # Measured against the maximised System Diagram dialog.
 DELETE_ROW_RATIO = (0.302, 0.085)

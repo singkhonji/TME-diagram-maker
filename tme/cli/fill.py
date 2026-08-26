@@ -23,10 +23,11 @@ import sys
 import time
 from pathlib import Path
 
-import config
-import grid
-import tmeio
-from excel_reader import Board, ExcelStructureError, load_boards
+from tme import config
+from tme import grid
+from tme.paths import RunPaths
+from tme import win as tmeio
+from tme.schedule.reader import Board, ExcelStructureError, load_boards
 
 
 def preflight(boards: list[Board], warnings: list[str], force: bool) -> bool:
@@ -51,7 +52,12 @@ def save_state(path: Path, payload: dict[str, object]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("workbook", nargs="?", default=config.DEFAULT_WORKBOOK)
+    parser.add_argument(
+        "target",
+        help="a building folder (projects/<client>/buildings/<slug>) or a "
+             "workbook path. Run artefacts -- state, log, screenshots -- go "
+             "into runs/ beside it.",
+    )
     parser.add_argument("--dry-run", action="store_true",
                         help="print the key sequence without sending anything")
     parser.add_argument("--start-at", default=None, metavar="BOARD",
@@ -75,7 +81,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        boards, warnings = load_boards(args.workbook)
+        paths = RunPaths.resolve(args.target)
+        boards, warnings = load_boards(
+            str(paths.workbook),
+            spare_system=paths.project.spare_system_fallback,
+        )
     except (ExcelStructureError, FileNotFoundError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
@@ -102,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"\nabort at any time with {config.ABORT_KEY_NAME}\n")
 
-    state_path = Path(config.STATE_FILE)
+    state_path = paths.state
     done: list[str] = []
     started = time.monotonic()
     rows_done = 0
@@ -113,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         number = getattr(circuit, "circuit_number", "?")
         print(f"    {board.name} [{index + 1}/{len(board.circuits)}] {number} ok")
         save_state(state_path, {
-            "workbook": args.workbook,
+            "workbook": str(paths.workbook),
             "boards_done": done,
             "current_board": board.name,
             "rows_done_in_board": index + 1,
@@ -129,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
         verbose=args.verbose,
         auto_dismiss_save=args.auto_dismiss_save,
+        intruder_shot=str(paths.intruder),
     ) as session:
         table = grid.SchematicGrid(session)
         try:

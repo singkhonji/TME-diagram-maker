@@ -1,0 +1,22 @@
+[project]
+name = "tme-diagram-maker"
+version = "0.1.0"
+description = "Fill Cubicost TME's Schematic Table from a Single Line Diagram"
+requires-python = ">=3.12"
+dependencies = [
+    "openpyxl>=3.1",
+    "pywin32>=306",
+    "pillow>=10.0",
+    "pypdfium2>=4.30",
+    "PyYAML>=6.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["tme*"]
+
+[tool.setuptools.package-data]
+"tme.tools" = ["assets/*.png"]

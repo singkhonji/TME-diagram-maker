@@ -20,9 +20,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import config
-import tmeio
-from excel_reader import Board, Circuit
+from tme import config
+from tme import win as tmeio
+from tme.schedule.reader import Board, Circuit
 
 
 @dataclass
