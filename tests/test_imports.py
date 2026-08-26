@@ -12,12 +12,12 @@ import importlib
 import pytest
 
 MODULES = [
-    "config",
+    "tme.config",
+    "tme.schedule.reader",
+    "tme.schedule.build",
+    "tme.cli.pdfcrop",
     "tmeio",
     "grid",
-    "excel_reader",
-    "build_schedule",
-    "pdfcrop",
     "run_fill",
     "probe",
     "delete_boards",

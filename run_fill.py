@@ -23,10 +23,10 @@ import sys
 import time
 from pathlib import Path
 
-import config
 import grid
 import tmeio
-from excel_reader import Board, ExcelStructureError, load_boards
+from tme import config
+from tme.schedule.reader import Board, ExcelStructureError, load_boards
 
 
 def preflight(boards: list[Board], warnings: list[str], force: bool) -> bool:

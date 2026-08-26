@@ -16,10 +16,10 @@ from __future__ import annotations
 
 import sys
 
-import config
 import grid
 import tmeio
-from excel_reader import load_boards
+from tme import config
+from tme.schedule.reader import load_boards
 
 
 def main(argv: list[str] | None = None) -> int:

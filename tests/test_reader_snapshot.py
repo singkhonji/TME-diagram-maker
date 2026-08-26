@@ -17,7 +17,7 @@ import pytest
 
 from tests.clientdata import SLUGS, SNAPSHOT_DIR, require
 
-import excel_reader
+from tme.schedule import reader as excel_reader
 
 SNAPSHOT = SNAPSHOT_DIR / "load_boards.json"
 

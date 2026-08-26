@@ -13,7 +13,7 @@ import pytest
 
 from tests.clientdata import SLUGS, require
 
-import build_schedule
+from tme.schedule import build as build_schedule
 
 
 def cell_grid(path) -> list[list[str]]:

@@ -40,7 +40,7 @@ import win32clipboard
 import win32con
 import win32gui
 
-import config
+from tme import config
 
 # --------------------------------------------------------------------------
 # Errors

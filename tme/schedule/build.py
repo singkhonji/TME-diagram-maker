@@ -31,8 +31,8 @@ from pathlib import Path
 import openpyxl
 import yaml
 
-import config
-from excel_reader import ExcelStructureError, load_boards, print_report
+from tme import config
+from tme.schedule.reader import ExcelStructureError, load_boards, print_report
 
 
 class DrawingError(Exception):

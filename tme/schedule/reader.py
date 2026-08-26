@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 import openpyxl
 
-import config
+from tme import config
 
 
 class ExcelStructureError(Exception):
