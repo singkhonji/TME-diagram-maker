@@ -34,6 +34,8 @@ ready.png
 delete_ghb.png
 
 # Client project data: drawings read by eye, the schedules built from them, and
-# everything a run against them produced.  This remote is public -- keep the
-# whole tree local, and see CLAUDE.md.  One rule so a new client inherits it.
+# everything a run against them produced.  The remote is private as of
+# 2026-08-26, but client data still stays out of it: a repo's visibility is one
+# settings click away from changing, and history cannot be un-pushed.  One rule
+# so a new client inherits it.  See CLAUDE.md.
 projects/

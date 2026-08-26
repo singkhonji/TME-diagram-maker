@@ -28,7 +28,7 @@ holds one building: the `drawing.yaml` read off the sheet, the `schedule.xlsx`
 built from it, and a `runs/` folder for everything a fill against it produced.
 
 `projects/` is gitignored in one line, so a new client inherits the protection.
-Nothing under it may reach a public remote -- see the last section of this file.
+Nothing under it reaches the remote at all -- see the last section of this file.
 
 A new client is a new folder: `projects/<slug>/project.yaml` for the conventions
 agreed with them, then one folder per building. Cable specs stay in each
@@ -123,5 +123,11 @@ simplifies it will walk back into the same trap. Where a rule can be enforced in
 code instead of documented (`NEVER_F2_KEYS`, the topological board ordering),
 enforce it in code.
 
-Client drawings and filled schedules are real project data. Keep them out of any
-commit that goes to a public remote.
+Client drawings and filled schedules are real project data. They never go in a
+commit. `projects/` is gitignored wholesale for exactly this, and the rule holds
+regardless of whether the remote is private today -- visibility is one settings
+click away from changing, and history cannot be un-pushed.
+
+A consequence worth knowing when someone new joins: cloning this repo gets them
+the engine and nothing else. The drawings, the built schedules and the run logs
+have to be handed over separately.
