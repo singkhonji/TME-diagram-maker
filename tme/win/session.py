@@ -39,6 +39,7 @@ from tme.win.window import (
     focus_window,
     foreground_title,
     looks_like,
+    save_prompt_reference,
 )
 
 # --- BEGIN MOVED FROM tmeio.py ---
@@ -176,7 +177,7 @@ class TmeSession:
 
         matched, why = looks_like(
             hwnd,
-            config.SAVE_PROMPT_REFERENCE,
+            save_prompt_reference(),
             config.SAVE_PROMPT_MAX_DIFF,
             config.SAVE_PROMPT_COMPARE_BOX,
         )

@@ -24,11 +24,12 @@ MODULES = [
     "tme.win.timing",
     "tme.win.window",
     "tme.win.session",
-    "grid",
-    "run_fill",
-    "probe",
-    "delete_boards",
-    "diagnose_row",
+    "tme.grid",
+    "tme.cli.fill",
+    "tme.cli.build",
+    "tme.tools.probe",
+    "tme.tools.delete_boards",
+    "tme.tools.diagnose_row",
 ]
 
 

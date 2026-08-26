@@ -17,6 +17,7 @@ import os
 import tempfile
 import time
 from ctypes import wintypes
+from importlib import resources
 
 import win32api
 import win32con
@@ -26,6 +27,18 @@ from tme import config
 from tme.win.errors import FocusLost, WindowNotFound
 from tme.win.input import _key_event, _send
 from tme.win.native import _user32
+
+def save_prompt_reference() -> str:
+    """Filesystem path to the stored picture of TME's "Save current project?".
+
+    A package resource, not a working-directory-relative filename: a run
+    started from a building folder must still find it, and the alternative
+    failure mode is a FileNotFoundError raised in the middle of a fill, when
+    the prompt appears -- not at startup, where it would be harmless.
+    """
+    ref = resources.files("tme.tools") / "assets" / "save_prompt_reference.png"
+    return str(ref)
+
 
 # --- BEGIN MOVED FROM tmeio.py ---
 # --------------------------------------------------------------------------

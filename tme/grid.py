@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from tme import win as tmeio
 from tme import config
+from tme import win as tmeio
 from tme.schedule.reader import Board, Circuit
 
 
