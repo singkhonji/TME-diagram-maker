@@ -17,19 +17,22 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Pre-refactor layout: drawings/BLD_Y1.yaml, drawings/BLD_Y1-schedule.xlsx
-CLIENT_ROOT = REPO_ROOT / "drawings"
+CLIENT_ROOT = REPO_ROOT / "projects" / "mrdiy"
 SNAPSHOT_DIR = CLIENT_ROOT / ".snapshots"
 
 SLUGS = ("Y1", "Y2", "Y3", "Y4")
 
 
+def building_dir(slug: str) -> Path:
+    return CLIENT_ROOT / "buildings" / slug
+
+
 def drawing_path(slug: str) -> Path:
-    return CLIENT_ROOT / f"BLD_{slug}.yaml"
+    return building_dir(slug) / "drawing.yaml"
 
 
 def workbook_path(slug: str) -> Path:
-    return CLIENT_ROOT / f"BLD_{slug}-schedule.xlsx"
+    return building_dir(slug) / "schedule.xlsx"
 
 
 def require(slug: str) -> tuple[Path, Path]:
