@@ -30,6 +30,7 @@ MODULES = [
     "tme.grid",
     "tme.cli.fill",
     "tme.cli.build",
+    "tme.cli.fill_all",
     "tme.tools.probe",
     "tme.tools.delete_boards",
     "tme.tools.diagnose_row",
