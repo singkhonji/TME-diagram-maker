@@ -34,7 +34,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-import tmeio
+from tme import win as tmeio
 from tme import config
 
 SCREENSHOT_DIR = Path("probe_shots")

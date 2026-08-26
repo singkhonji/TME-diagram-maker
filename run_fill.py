@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 
 import grid
-import tmeio
+from tme import win as tmeio
 from tme import config
 from tme.schedule.reader import Board, ExcelStructureError, load_boards
 

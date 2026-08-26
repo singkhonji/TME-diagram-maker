@@ -17,7 +17,7 @@ from __future__ import annotations
 import sys
 
 import grid
-import tmeio
+from tme import win as tmeio
 from tme import config
 from tme.schedule.reader import load_boards
 
